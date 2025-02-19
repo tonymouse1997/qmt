@@ -3,12 +3,13 @@ from xtquant.xttrader import XtQuantTrader
 from datetime import datetime, time
 
 class ScalpingStrategy:
-    def __init__(self):
+    def __init__(self, market_cap_min):
         self.trader = XtQuantTrader()  # 初始化交易接口
         self.positions = {}            # 持仓记录
         self.trade_log = []            # 交易日志
         self.blacklist = set()         # 暂停交易股票池
-
+        self.market_cap_min = market_cap_min
+        
     #------------------ 核心逻辑 ------------------#
     def select_stocks(self):
         """

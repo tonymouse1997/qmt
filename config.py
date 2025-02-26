@@ -1,32 +1,21 @@
-from datetime import time
-
 # 策略参数配置
 class Config:
-    # 市值筛选参数
-    LARGE_CAP_THRESHOLD = 30_0000_0000  # 300亿
-    SMALL_CAP_TURNOVER_THRESHOLD = 3_0000_0000  # 3亿
+    # 股票池参数
+    BIG_MARKET_CAP = 30_0000_0000  # 3亿流通市值阈值（单位：元）
+    SMALL_AMOUNT_THRESHOLD = 300_000_000  # 小票池成交额阈值（3亿）
+    ADDITIONAL_STOCKS = []  # 自定义添加的股票代码列表
     
-    # 涨幅筛选参数
-    LARGE_CAP_INCREASE_THRESHOLD = 0.03  # 3%
-    SMALL_CAP_INCREASE_THRESHOLD = 0.08  # 8%
-    
-    # 成交额筛选参数
-    TICK_TURNOVER_THRESHOLD = 2000_0000  # 2000万
-    DAILY_TURNOVER_THRESHOLD = 1_0000_0000  # 1亿
+    # 触发条件参数 
+    WEIGHT_GAIN_THRESHOLD = 0.03  # 权重股涨幅阈值（3%）
+    SECTOR_GAIN_THRESHOLD = 0.08  # 板块个股涨幅阈值（8%）
+    TICK_AMOUNT_THRESHOLD = 20_000_000  # 单tick成交额阈值（2000万）
+    DAILY_AMOUNT_THRESHOLD = 100_000_000  # 当日成交额阈值（1亿）
     
     # 交易参数
-    ORDER_AMOUNT = 100000  # 单笔订单金额
-    MAX_LIMIT_UP_SECTIONS = 3  # 最大涨停板块数
+    ORDER_AMOUNT = 100_000  # 单笔委托金额（元）
+    MAX_SECTORS = 3  # 最大允许涨停板块数
+    SELL_TIME = "09:40"  # 次日卖出时间
     
-    # 交易时间
-    SELL_TIME = time(9, 40)  # 次日卖出时间
-    
-    # 日志配置
-    LOG_FILE = 'strategy.log'
-    LOG_LEVEL = 'INFO'
-    
-    # QMT相关配置
-    QMT_ACCOUNT = ''  # QMT账号
-    QMT_PASSWORD = ''  # QMT密码
-    QMT_TRADE_SERVER = ''  # QMT交易服务器地址
-    QMT_DATA_SERVER = ''  # QMT数据服务器地址
+    # 风控参数
+    MAX_POSITIONS = 5  # 最大持仓数量
+    STOP_LOSS = 0.05

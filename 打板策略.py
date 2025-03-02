@@ -204,6 +204,18 @@ class ScalpingStrategy:
             print(f"检查{stock}首板状态出错: {str(e)}")
             return False
             
+    def _is_limit_up(self, stock, tick):
+        """判断股票是否涨停（不考虑其他条件）"""
+        try:
+            # 计算涨停价
+            limit_price = round(xtdata.get_market_data([], [stock], 'pre_close')[-1][0] * 1.1, 2)
+            # 判断当前价格是否达到涨停价
+            current_price = tick['last']
+            return abs(current_price - limit_price) < 0.01
+        except Exception as e:
+            print(f"检查{stock}涨停状态出错: {str(e)}")
+            return False
+            
     def _check_sector_strength(self, stock):
         # 获取同板块股票
         sector = xtdata.get_stock_sector(stock)
@@ -215,12 +227,12 @@ class ScalpingStrategy:
             try:
                 # 获取实时数据
                 tick = xtdata.get_full_tick([s])[s]
-                if self._is_qualified_limit_up(s, tick):
+                if self._is_limit_up(s, tick):  # 使用新方法，只判断是否涨停
                     limit_up_count += 1
             except Exception as e:
                 print(f"获取{s}数据出错: {str(e)}")
                 continue
-        return limit_up_count >= 3
+        return limit_up_count >= self.params.get('板块涨停数阈值', 3)
 
     def _position_available(self):
         """检查是否有可用仓位"""

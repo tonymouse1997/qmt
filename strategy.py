@@ -130,12 +130,39 @@ class SectorChaseStrategy(bt.Strategy):
 # 需要实现的辅助函数（需对接QMT接口）
 def get_market_cap_data():
     """获取全市场流通市值数据"""
-    pass
+    try:
+        # 从本地文件加载市值数据
+        import os
+        import pandas as pd
+        market_cap_file = 'a_share_data/market_cap/market_cap.csv'
+        if not os.path.exists(market_cap_file):
+            raise FileNotFoundError(f"市值数据文件不存在: {market_cap_file}")
+        
+        market_cap_df = pd.read_csv(market_cap_file)
+        # 将股票代码作为索引，市值作为值
+        return dict(zip(market_cap_df['stock_code'], market_cap_df['market_cap']))
+    except Exception as e:
+        print(f"获取市值数据失败: {str(e)}")
+        return {}
 
 def get_stock_sector(stock):
     """通过QMT获取股票所属板块"""
-    pass
+    try:
+        # 从本地文件加载板块数据
+        import os
+        import pandas as pd
+        sector_file = 'a_share_data/sector_info/sector_info.csv'
+        if not os.path.exists(sector_file):
+            raise FileNotFoundError(f"板块数据文件不存在: {sector_file}")
+        
+        sector_df = pd.read_csv(sector_file)
+        # 筛选指定股票的板块信息
+        stock_sector = sector_df[sector_df['stock_code'] == stock]['sector'].values
+        if len(stock_sector) > 0:
+            return stock_sector[0]
+        return None
+    except Exception as e:
+        print(f"获取股票 {stock} 板块信息失败: {str(e)}")
+        return None
 
-def get_sector_stocks(sector):
-    """通过QMT获取板块成分股"""
-    pass
+

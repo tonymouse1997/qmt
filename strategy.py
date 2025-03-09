@@ -3,6 +3,7 @@ from datetime import datetime, time
 import pandas as pd
 from utils import setup_logger, parse_time, is_trading_time, calculate_percentage_change
 from config import Config
+from qmt_data_fetcher import *
 
 class SectorChaseStrategy(bt.Strategy):
     """涨停板板块联动策略

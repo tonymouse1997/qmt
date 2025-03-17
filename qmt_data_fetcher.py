@@ -13,6 +13,9 @@ def get_sector_df(instrument_type='stock'):
     sector_df = pd.DataFrame(data, columns=['sector', 'stock_code'])
     return sector_df
 
+def get_stock_list_in_sector(sector_name):
+    return xtdata.get_stock_list_in_sector(sector_name)
+
 # def download_stocks_in_sectors():   
 #     return pd.DataFrame.from_dict(sector_dict,orient='index').T
 def get_sectors_of_stocks(instrument_type='stock'):
@@ -43,7 +46,7 @@ def get_basic_info_df():
     data = {
         'stock_code': stock_list,
         'float_volume': [details[stock]["FloatVolume"] for stock in stock_list],
-        'last_price': [ticks[stock]['lastPrice'] for stock in stock_list],
+        'last_price': [details[stock]['PreClose'] for stock in stock_list],
         'limit_up_price': [details[stock]['UpStopPrice'] for stock in stock_list],
         'limit_down_price': [details[stock]['DownStopPrice'] for stock in stock_list],
         'list_date': [details[stock]['OpenDate'] for stock in stock_list]

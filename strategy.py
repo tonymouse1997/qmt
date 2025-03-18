@@ -94,36 +94,30 @@ class SectorChaseStrategy(bt.Strategy):
         根据权重池股票涨幅超过3%的情况，建立或更新板块池
         """
         # 记录涨幅超过3%的权重股票及其板块
-        
-        for stock in self.weights_pool:
-            tick_info = tick_data.get(stock, {})
-            price_change = tick_info.get('price_change_pct', 0)
-            
-            # 涨幅超过3%的权重股触发板块池建立
-            if price_change >= self.p.weight_gain:
-                sector = get_stock_sector(stock)
-                if sector not in self.section_pools:
-                    self.section_pools[sector] = {
-                        'trigger_stocks': set(),  # 触发股票
-                        'stocks': set()  # 板块内所有股票
-                    }
-                self.section_pools[sector]['trigger_stocks'].add(stock)
-        
-        # 获取触发板块中的所有股票
-        for sector in triggered_sectors:
-            sector_stocks = get_stock_list_in_sector(sector)
-            self.section_pools[sector]['stocks'].update(sector_stocks)
+        for stock in self.datas:
+            tick_info = get_tick(stock.p.dataname)
+            if tick_info is None:
+                continue
+            price_change = (tick_info['last'] - tick_info['preclose']) / tick_info['preclose']
 
-    def _process_tick_data(self, tick_data):
-        """处理tick数据，实现策略核心逻辑"""
-        # 步骤2：更新板块池
-        self._update_sector_pools(tick_data)
-        
-        # 步骤3+4：更新待打池
-        self._update_prepare_pool(tick_data)
-        
-        # 步骤5：执行交易
-        self._execute_orders()
+            # 检查是否为权重股
+            if stock.p.dataname in self.weights_pool:
+                # 涨幅超过3%的权重股触发板块池建立
+                if price_change >= self.weight_gain:
+                    sector = get_stock_sector(stock.p.dataname)  # 使用股票代码
+                    if sector:  # 确保获取到板块信息
+                        if sector not in self.section_pools:
+                            self.section_pools[sector] = {
+                                'trigger_stocks': set(),  # 触发股票
+                                'stocks': set()  # 板块内所有股票
+                            }
+                        self.section_pools[sector]['trigger_stocks'].add(stock.p.dataname)
+                        # 获取并更新板块内所有股票
+                        sector_stocks = get_stock_list_in_sector(sector)
+                        if sector_stocks:
+                            self.section_pools[sector]['stocks'].update(sector_stocks)
+
+
     def _update_prepare_pool(self, tick_data):
         """更新待打池（策略步骤3+4实现）"""
         # 步骤3：筛选符合条件的小票
@@ -147,8 +141,8 @@ class SectorChaseStrategy(bt.Strategy):
             if tick_info is None:
                 continue
             # 单tick成交额超过阈值 或 当日累计成交额超过阈值
-            if (tick_info.get('amount', 0) >= self.p.tick_amount or
-                tick_info.get('daily_amount', 0) >= self.p.daily_amount):
+            if (tick_info['money'] >= self.tick_amount or
+                tick_info['amount'] >= self.daily_amount):
                 final_pool.add(stock)
         self.prepare_pool = final_pool
 
@@ -162,16 +156,18 @@ class SectorChaseStrategy(bt.Strategy):
             if tick_info is None:
                 continue
             # 获取涨停价
-            limit_up_price = tick_data[stock]['limit_up']
+            limit_up_price = tick_info['high_limit']
             # 当前价达到涨停价且还有仓位空间
-            if (tick_data[stock]['last'] >= limit_up_price and 
-                len(self.positions) < self.p.max_positions):
-                
-                # 计算可买数量
-                size = self.p.order_amount // limit_up_price
-                self.buy(data=stock, price=limit_up_price, size=size)
-                
-                # 记录板块信息
+            if (tick_info['last'] >= limit_up_price and
+                len(self.broker.get_positions()) < self.max_positions):
+
+                # 计算可买数量,涨停价向下取整到分
+                buy_price = int(limit_up_price*100)/100
+                size = int(self.order_amount // buy_price)
+
+                self.buy(data=self.datas[0], price=buy_price, size=size)
+
+                # 记录板块信息,涨停
                 sector = get_stock_sector(stock)
                 self.limit_up_sections.add(sector)
                 self.logger.info(f"Buy {stock} at {limit_up_price}, size {size}, sector {sector}")
@@ -179,23 +175,26 @@ class SectorChaseStrategy(bt.Strategy):
     def _sell_positions(self):
         """次日卖出（策略步骤7实现）"""
         for stock in list(self.positions.keys()):
-            if self.getposition(stock).size > 0:
-                self.close(data=stock)
-
-    
+            self.close(data=self.datas[0]) #市价卖出
+            self.logger.info(f"Sell {stock} at market price")
 
     def next(self):
-        current_time = self.data.datetime.time()
-        if self.current_date != self.data.datetime.date():
+        print(self.time)
+        current_time = self.datas[0].datetime.time()
+        current_date = self.datas[0].datetime.date()
+        print(current_date, current_time)
+        if self.current_date != current_date:
             self._init_daily_data()
             self.current_date = current_date
         print(f"current_time: {current_time}, is_trading_time: {is_trading_time(current_time)}")
 
         if is_trading_time(current_time):
-            tick_data = self._get_current_tick_data()
-            self._process_tick_data(tick_data)
-            
-        if current_time >= parse_time(self.p.sell_time):
+            self._update_sector_pools()
+            #tick_data = {data.p.dataname: get_tick(data.p.dataname) for data in self.datas}  # 获取所有股票的tick数据
+            self._update_prepare_pool()
+            self._execute_orders()
+
+        if current_time >= parse_time(self.sell_time):
             self._sell_positions()
 
 

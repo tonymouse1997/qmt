@@ -72,10 +72,10 @@ class BacktestDataFeed:
                     result[stock_code] = row
         return result
         
-    @property
-    def data(self):
-        """Backward compatibility for existing code"""
-        if not self._data_cache:
-            for stock_code in self.stock_list:
-                self.get_stock_data(stock_code)
-        return self._data_cache
+    # @property
+    # def data(self):
+    #     """Backward compatibility for existing code"""
+    #     if not self._data_cache:
+    #         for stock_code in self.stock_list:
+    #             self.get_stock_data(stock_code)
+    #     return self._data_cache

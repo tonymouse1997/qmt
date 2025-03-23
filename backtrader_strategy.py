@@ -1,8 +1,9 @@
 import backtrader as bt
 from datetime import datetime
 from qmt_data_fetcher import get_basic_info_df, get_sectors_of_stocks
-from utils import parse_time, calculate_percentage_change
+from utils import *
 from factor_library import *
+from xtquant import xtdata
 
 class SectorChaseStrategy(bt.Strategy):
     params = (
@@ -71,10 +72,7 @@ class SectorChaseStrategy(bt.Strategy):
         #TODO: 实现获取平均成交额的函数
         return 3e8
 
-    def _is_limit_up(self, stock_code):
-        #TODO: 实现判断是否涨停的函数
-        return is_limit_up(stock_code, self.datas[0].close[0])
-        #return False
+
 
     def _update_sector_pools(self):
         """更新板块池（策略步骤2实现）
@@ -223,27 +221,36 @@ if __name__ == '__main__':
     # Add a strategy
     cerebro.addstrategy(SectorChaseStrategy)
 
-    # Datas are in a subfolder of the samples. Need to find where the script is
-    # because relative, datadir has to be specified not from the process
-    # directory but from the script directory
-    # modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
-    # datadir = os.path.join(modpath, '../../datas/stocks/aapl-2001-2002.txt')
+    # 获取所有股票的行情数据
+    stock_list = xtdata.get_stock_list_in_sector('沪深A股')  # 示例股票代码列表
+    start_date = '20250101'
+    end_date = '20250228'
 
-    # Create a Data Feed
-    # data = bt.feeds.GenericCSVData(
-    #     dataname=datadir,
-    #     dtformat=('%Y-%m-%d'),
-    #     datetime=0,
-    #     open=1,
-    #     high=2,
-    #     low=3,
-    #     close=4,
-    #     volume=5,
-    #     openinterest=-1
-    # )
+    stocks_data = xtdata.get_market_data_ex(
+        stock_list=stock_list,
+        start_time=start_date,
+        end_time=end_date,
+        period='tick',
+        field_list=['lastPrice', 'volume', 'amount']
+    )
+    print(stocks_data)
+    for stock_code, df in stocks_data:
 
-    # Add the Data Feed to Cerebro
-    # cerebro.adddata(data)
+        # 通过xtdata获取每只股票的历史数据        
+        # 创建每只股票的数据源
+        data = bt.feeds.PandasData(
+            dataname=df,
+            datetime=0,
+            open=-1,
+            high=-1,
+            low=-1,
+            close=1,
+            volume=2,
+            openinterest=-1
+        )
+        
+        # 将每只股票的数据添加到cerebro中
+        cerebro.adddata(data, name=stock_code)
 
     # Set our desired cash start
     cerebro.broker.setcash(100000.0)

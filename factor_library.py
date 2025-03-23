@@ -28,6 +28,11 @@ def get_limit_up_price(stock_code):
     """获取涨停价"""
     return basic_info_df.loc[stock_code, 'limit_up_price']
 
+def is_limit_up(stock_code):
+    #TODO: 实现判断是否涨停的函数
+    return 
+
+
 if __name__ == '__main__':
     # 示例用法
     stock_code = '600000.SH'  # 示例股票代码

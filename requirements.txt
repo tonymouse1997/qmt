@@ -1,0 +1,4 @@
+backtrader>=1.9.76.123
+pandas>=1.5.3
+numpy>=1.24.3
+xtdata>=1.0.0 

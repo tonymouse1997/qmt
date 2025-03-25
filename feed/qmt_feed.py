@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from core.data_feed import DataFeed
 import xtdata
 
@@ -275,4 +276,89 @@ class QMTDataFeed(DataFeed):
             return data.get(stock_code, pd.DataFrame())
         except Exception as e:
             logging.error(f"获取股票 {stock_code} 的tick数据失败: {str(e)}")
-            return pd.DataFrame() 
+            return pd.DataFrame()
+
+    def download_history_data(self, sector_name='沪深A股', period='1d', 
+                            start_time=None, end_time=None):
+        """
+        下载历史数据
+        :param sector_name: 板块名称
+        :param period: 数据周期，如'1d'或'tick'
+        :param start_time: 开始时间，默认为一年前
+        :param end_time: 结束时间，默认为当前时间
+        """
+        try:
+            if start_time is None:
+                start_time = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
+            if end_time is None:
+                end_time = datetime.now().strftime('%Y%m%d')
+                
+            # 如果不是tick数据，不需要指定时间范围
+            start_time, end_time = ('', '') if period != 'tick' else (start_time, end_time)
+            
+            # 获取股票列表
+            stock_list = self.get_sector_stocks(sector_name)
+            if not stock_list:
+                logging.error(f"获取板块 {sector_name} 的股票列表失败")
+                return
+            
+            # 创建数据目录
+            os.makedirs('a_share_data', exist_ok=True)
+            
+            # 下载每只股票的数据
+            for stock in stock_list:
+                try:
+                    self._xtdata.download_history_data(
+                        stock, 
+                        period=period, 
+                        start_time=start_time, 
+                        end_time=end_time, 
+                        incrementally=True
+                    )
+                    logging.info(f'股票 {stock} 的 {period} 数据下载完成')
+                except Exception as e:
+                    logging.error(f"下载股票 {stock} 的数据失败: {str(e)}")
+                    
+        except Exception as e:
+            logging.error(f"下载历史数据失败: {str(e)}")
+
+    def save_sector_info(self, output_dir='a_share_data/sector_info'):
+        """
+        获取并保存板块信息
+        :param output_dir: 输出目录
+        """
+        try:
+            # 获取所有A股股票代码
+            stock_list = self.get_sector_stocks('沪深A股')
+            if not stock_list:
+                logging.error("获取股票列表失败")
+                return
+            
+            # 创建输出目录
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # 获取每只股票的板块信息
+            sector_data = []
+            for stock in stock_list:
+                try:
+                    sector_info = self._xtdata.get_stock_sector_info(stock)
+                    if sector_info:
+                        sector_data.append({
+                            'stock_code': stock,
+                            'sector': sector_info['sector'],
+                            'industry': sector_info['industry']
+                        })
+                except Exception as e:
+                    logging.error(f"获取股票 {stock} 的板块信息失败: {str(e)}")
+            
+            # 保存为DataFrame
+            if sector_data:
+                df = pd.DataFrame(sector_data)
+                output_file = os.path.join(output_dir, 'sector_info.csv')
+                df.to_csv(output_file, index=False)
+                logging.info(f"板块信息已保存到 {output_file}")
+            else:
+                logging.error("没有获取到有效的板块信息")
+                
+        except Exception as e:
+            logging.error(f"保存板块信息失败: {str(e)}") 

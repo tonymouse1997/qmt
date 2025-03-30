@@ -1,0 +1,3 @@
+"""
+QMT strategies package
+""" 

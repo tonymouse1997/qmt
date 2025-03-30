@@ -10,11 +10,14 @@ class Strategy(ABC):
         self.trade_interface = trade_interface
     
     @abstractmethod
-    def on_bar(self):
-        """每个bar的处理逻辑"""
+    def on_data(self):
+        """处理每个数据点的逻辑"""
         pass
-    
-    @abstractmethod
-    def on_tick(self):
-        """每个tick的处理逻辑"""
-        pass 
+        
+    def buy(self, stock_code: str, price: float, volume: int) -> bool:
+        """买入股票"""
+        return self.trade_interface.buy(stock_code, price, volume)
+        
+    def sell(self, stock_code: str, price: float, volume: int) -> bool:
+        """卖出股票"""
+        return self.trade_interface.sell(stock_code, price, volume)

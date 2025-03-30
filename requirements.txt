@@ -1,4 +1,7 @@
 backtrader>=1.9.76.123
 pandas>=1.5.3
 numpy>=1.24.3
-xtdata>=1.0.0 
+xtquant>=1.0.0
+scikit-learn>=1.0.2
+matplotlib>=3.5.1
+seaborn>=0.11.2 

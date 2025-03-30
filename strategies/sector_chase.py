@@ -14,8 +14,8 @@ class SectorChaseStrategy(Strategy):
         self.last_sector_change = None
         self.sector_change_interval = 5  # 板块切换间隔（天）
         
-    def on_bar(self):
-        """每个bar的处理逻辑"""
+    def on_data(self):
+        """处理每个数据点的逻辑"""
         try:
             # 获取当前日期
             current_date = datetime.now().date()
@@ -31,10 +31,6 @@ class SectorChaseStrategy(Strategy):
                 
         except Exception as e:
             logging.error(f"策略执行失败: {str(e)}")
-    
-    def on_tick(self):
-        """每个tick的处理逻辑"""
-        pass
     
     def _change_sector(self):
         """切换板块"""

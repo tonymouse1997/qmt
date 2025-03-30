@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from core.data_feed import DataFeed
-import xtdata
+from xtquant import xtdata
 
 class QMTDataFeed(DataFeed):
     """QMT数据源实现"""
@@ -264,22 +264,8 @@ class QMTDataFeed(DataFeed):
             logging.error(f"获取市场数据失败: {str(e)}")
             return {}
 
-    def get_tick_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """获取tick数据"""
-        try:
-            data = self.get_market_data(
-                stock_list=[stock_code],
-                start_date=start_date,
-                end_date=end_date,
-                period='tick'
-            )
-            return data.get(stock_code, pd.DataFrame())
-        except Exception as e:
-            logging.error(f"获取股票 {stock_code} 的tick数据失败: {str(e)}")
-            return pd.DataFrame()
-
-    def download_history_data(self, sector_name='沪深A股', period='1d', 
-                            start_time=None, end_time=None):
+    def download_data(self, sector_name='沪深A股', period='1d', 
+                            start_time=(datetime.now() - timedelta(days=365)).strftime('%Y%m%d'), end_time=datetime.now().strftime('%Y%m%d')):
         """
         下载历史数据
         :param sector_name: 板块名称
@@ -288,10 +274,6 @@ class QMTDataFeed(DataFeed):
         :param end_time: 结束时间，默认为当前时间
         """
         try:
-            if start_time is None:
-                start_time = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
-            if end_time is None:
-                end_time = datetime.now().strftime('%Y%m%d')
                 
             # 如果不是tick数据，不需要指定时间范围
             start_time, end_time = ('', '') if period != 'tick' else (start_time, end_time)
@@ -302,9 +284,7 @@ class QMTDataFeed(DataFeed):
                 logging.error(f"获取板块 {sector_name} 的股票列表失败")
                 return
             
-            # 创建数据目录
-            os.makedirs('a_share_data', exist_ok=True)
-            
+            logging.info(f'共需下载{len(stock_list)}支股票数据')
             # 下载每只股票的数据
             for stock in stock_list:
                 try:

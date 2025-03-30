@@ -38,7 +38,7 @@ class QMTDataFeed(DataFeed):
         data = [(sector, stock) for sector, stocks in sector_dict.items() for stock in stocks]
         return pd.DataFrame(data, columns=['sector', 'stock_code'])
 
-    def _get_sectors_of_stocks(self, instrument_type='stock'):
+    def get_sectors_of_stocks(self, instrument_type='stock'):
         """获取股票所属板块信息"""
         sector_df = self._get_sector_df(instrument_type)
         merged_df = sector_df.groupby('stock_code')['sector'].agg(list).reset_index()

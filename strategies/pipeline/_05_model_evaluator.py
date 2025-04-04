@@ -151,35 +151,74 @@ class ModelEvaluator:
         
         return stats
     
-    def generate_report(self, 
-                       y_true: pd.Series, 
-                       y_pred: pd.Series, 
-                       market_data: pd.DataFrame = None,
-                       save_dir: str = None) -> Dict[str, Any]:
-        """生成完整的评估报告
+    def generate_report(self, y_true: pd.Series, y_pred: np.ndarray, market_data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
+        """生成评估报告
         
         Args:
             y_true: 真实值
             y_pred: 预测值
             market_data: 市场数据
-            save_dir: 图表保存目录
             
         Returns:
             评估报告字典
         """
-        report = {
-            'metrics': self.evaluate(y_true, y_pred),
-            'error_analysis': self.analyze_errors(y_true, y_pred),
-            'hourly_analysis': self.analyze_by_time(y_true, y_pred)
-        }
-        
-        if market_data is not None:
-            report['market_condition_analysis'] = self.analyze_by_market_condition(
-                y_true, y_pred, market_data
-            )
+        try:
+            # 确保数据类型正确
+            y_true = pd.Series(y_true)
+            y_pred = pd.Series(y_pred, index=y_true.index)
             
-        if save_dir:
-            self.plot_error_distribution(y_true, y_pred, f"{save_dir}/error_distribution.png")
-            self.plot_prediction_vs_actual(y_true, y_pred, f"{save_dir}/prediction_vs_actual.png")
+            # 计算基础指标
+            mse = mean_squared_error(y_true, y_pred)
+            rmse = np.sqrt(mse)
+            mae = mean_absolute_error(y_true, y_pred)
+            r2 = r2_score(y_true, y_pred)
             
-        return report 
+            # 计算方向准确率
+            direction_true = np.sign(y_true)
+            direction_pred = np.sign(y_pred)
+            direction_accuracy = np.mean(direction_true == direction_pred)
+            
+            # 计算夏普比率
+            returns = pd.Series(y_true, index=y_true.index)
+            sharpe_ratio = np.sqrt(252) * returns.mean() / returns.std() if returns.std() != 0 else 0
+            
+            # 计算最大回撤
+            cumulative_returns = (1 + returns).cumprod()
+            rolling_max = cumulative_returns.expanding().max()
+            drawdowns = cumulative_returns / rolling_max - 1
+            max_drawdown = drawdowns.min()
+            
+            # 生成报告
+            report = {
+                'metrics': {
+                    'mse': mse,
+                    'rmse': rmse,
+                    'mae': mae,
+                    'r2': r2,
+                    'direction_accuracy': direction_accuracy,
+                    'sharpe_ratio': sharpe_ratio,
+                    'max_drawdown': max_drawdown
+                },
+                'summary': {
+                    'total_samples': len(y_true),
+                    'positive_predictions': np.sum(y_pred > 0),
+                    'negative_predictions': np.sum(y_pred < 0),
+                    'zero_predictions': np.sum(y_pred == 0)
+                }
+            }
+            
+            # 记录评估结果
+            self.logger.info("模型评估报告:")
+            self.logger.info(f"MSE: {mse:.4f}")
+            self.logger.info(f"RMSE: {rmse:.4f}")
+            self.logger.info(f"MAE: {mae:.4f}")
+            self.logger.info(f"R2: {r2:.4f}")
+            self.logger.info(f"方向准确率: {direction_accuracy:.2%}")
+            self.logger.info(f"夏普比率: {sharpe_ratio:.2f}")
+            self.logger.info(f"最大回撤: {max_drawdown:.2%}")
+            
+            return report
+            
+        except Exception as e:
+            self.logger.error(f"生成评估报告时出错: {str(e)}")
+            raise 

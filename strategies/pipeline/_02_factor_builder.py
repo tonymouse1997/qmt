@@ -1,193 +1,351 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, List
 import logging
-import talib
+from typing import Dict, Any, Callable
 
 class FactorBuilder:
+    """因子构建器类"""
+    
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.factors: Dict[str, callable] = {}
+        self.factor_registry = {}
         
-    def register_factor(self, name: str, factor_func: callable):
+    def register_factor(self, factor_name: str, factor_func: Callable):
         """注册因子计算函数
         
         Args:
-            name: 因子名称
+            factor_name: 因子名称
             factor_func: 因子计算函数
         """
-        self.factors[name] = factor_func
+        self.factor_registry[factor_name] = factor_func
         
-    def build_factors(self, market_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-        """构建所有因子
+    def build_factors(self, market_data):
+        """
+        构建因子
         
         Args:
-            market_data: 处理后的市场数据字典
+            market_data: 市场数据，字典格式，key为股票代码，value为DataFrame
             
         Returns:
-            因子数据DataFrame
+            因子数据，字典格式，key为股票代码，value为DataFrame
+            
+        Raises:
+            ValueError: 当市场数据为空时抛出
         """
-        factor_data = pd.DataFrame(index=market_data['tick'].index)
+        self.logger.info("开始构建因子")
         
-        for name, factor_func in self.factors.items():
+        if not market_data:
+            raise ValueError("市场数据为空")
+            
+        self.logger.info(f"市场数据包含 {len(market_data)} 只股票")
+        
+        factor_data = {}
+        for stock_code, df in market_data.items():
             try:
-                factor_data[name] = factor_func(market_data)
-            except Exception as e:
-                self.logger.error(f"计算因子 {name} 时出错: {str(e)}")
+                if df is None or df.empty:
+                    self.logger.warning(f"股票 {stock_code} 的数据为空，跳过因子构建")
+                    continue
+                    
+                self.logger.info(f"构建股票 {stock_code} 的因子，数据形状: {df.shape}")
                 
+                # 创建技术因子
+                technical_factors = self.create_technical_factors(df)
+                
+                # 创建价格因子
+                price_factors = self.create_price_factors(df)
+                
+                # 创建成交量因子
+                volume_factors = self.create_volume_factors(df)
+                
+                # 创建市场微观结构因子
+                microstructure_factors = self.create_market_microstructure_factors(df)
+                
+                # 创建组合因子
+                combined_factors = self.create_combined_factors(df)
+                
+                # 合并所有因子
+                all_factors = pd.concat([
+                    technical_factors,
+                    price_factors,
+                    volume_factors,
+                    microstructure_factors,
+                    combined_factors
+                ], axis=1)
+                
+                factor_data[stock_code] = all_factors
+                self.logger.info(f"股票 {stock_code} 的因子构建完成，因子数量: {all_factors.shape[1]}")
+                
+            except Exception as e:
+                self.logger.error(f"构建股票 {stock_code} 的因子时出错: {str(e)}")
+                raise
+                
+        if not factor_data:
+            raise ValueError("因子数据为空")
+            
+        self.logger.info(f"因子构建完成，共 {len(factor_data)} 只股票")
         return factor_data
-    
-    @staticmethod
-    def create_technical_factors(market_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-        """创建技术指标因子
+        
+    def create_technical_factors(self, data: pd.DataFrame) -> pd.DataFrame:
+        """创建技术因子
         
         Args:
-            market_data: 市场数据字典
+            data: 市场数据
             
         Returns:
-            技术指标因子DataFrame
+            技术因子DataFrame
         """
-        tick_data = market_data['tick']
-        daily_data = market_data['daily']
+        try:
+            self.logger.info("开始创建技术因子")
+            
+            # 检查数据列
+            required_columns = ['lastprice']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                self.logger.error(f"缺少必要的列: {missing_columns}")
+                self.logger.info(f"可用的列: {data.columns.tolist()}")
+                # 尝试使用替代列
+                if 'lastprice' not in data.columns and 'close' in data.columns:
+                    self.logger.info("使用'close'列替代'lastprice'列")
+                    data = data.copy()
+                    data['lastprice'] = data['close']
+                else:
+                    raise ValueError(f"缺少必要的列: {missing_columns}")
+            
+            factors = pd.DataFrame(index=data.index)
+            
+            # 计算移动平均
+            factors['ma5'] = data['lastprice'].rolling(5).mean()
+            factors['ma10'] = data['lastprice'].rolling(10).mean()
+            factors['ma20'] = data['lastprice'].rolling(20).mean()
+            
+            # 计算RSI
+            delta = data['lastprice'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            factors['rsi'] = 100 - (100 / (1 + rs))
+            
+            self.logger.info(f"技术因子创建成功，形状: {factors.shape}")
+            return factors
+            
+        except Exception as e:
+            self.logger.error(f"创建技术因子时出错: {str(e)}")
+            raise
         
-        factors = pd.DataFrame(index=tick_data.index)
-        
-        # RSI
-        factors['rsi'] = talib.RSI(tick_data['close'].values)
-        
-        # MACD
-        macd, macd_signal, macd_hist = talib.MACD(tick_data['close'].values)
-        factors['macd'] = macd
-        factors['macd_signal'] = macd_signal
-        factors['macd_hist'] = macd_hist
-        
-        # KDJ
-        slowk, slowd = talib.STOCH(tick_data['high'].values, 
-                                  tick_data['low'].values, 
-                                  tick_data['close'].values)
-        factors['kdj_k'] = slowk
-        factors['kdj_d'] = slowd
-        
-        # 布林带
-        upper, middle, lower = talib.BBANDS(tick_data['close'].values)
-        factors['bb_upper'] = upper
-        factors['bb_middle'] = middle
-        factors['bb_lower'] = lower
-        
-        return factors
-    
-    @staticmethod
-    def create_price_factors(market_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-        """创建价格特征因子
+    def create_price_factors(self, data: pd.DataFrame) -> pd.DataFrame:
+        """创建价格因子
         
         Args:
-            market_data: 市场数据字典
+            data: 市场数据
             
         Returns:
-            价格特征因子DataFrame
+            价格因子DataFrame
         """
-        tick_data = market_data['tick']
-        daily_data = market_data['daily']
+        try:
+            self.logger.info("开始创建价格因子")
+            
+            # 检查数据列
+            required_columns = ['lastprice', 'openprice', 'highprice', 'lowprice']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                self.logger.error(f"缺少必要的列: {missing_columns}")
+                self.logger.info(f"可用的列: {data.columns.tolist()}")
+                # 尝试使用替代列
+                data = data.copy()
+                if 'lastprice' not in data.columns and 'close' in data.columns:
+                    self.logger.info("使用'close'列替代'lastprice'列")
+                    data['lastprice'] = data['close']
+                if 'openprice' not in data.columns and 'open' in data.columns:
+                    self.logger.info("使用'open'列替代'openprice'列")
+                    data['openprice'] = data['open']
+                if 'highprice' not in data.columns and 'high' in data.columns:
+                    self.logger.info("使用'high'列替代'highprice'列")
+                    data['highprice'] = data['high']
+                if 'lowprice' not in data.columns and 'low' in data.columns:
+                    self.logger.info("使用'low'列替代'lowprice'列")
+                    data['lowprice'] = data['low']
+                
+                # 再次检查是否所有必要的列都存在
+                missing_columns = [col for col in required_columns if col not in data.columns]
+                if missing_columns:
+                    raise ValueError(f"缺少必要的列: {missing_columns}")
+            
+            factors = pd.DataFrame(index=data.index)
+            
+            # 计算价格动量
+            factors['price_momentum_1d'] = data['lastprice'].pct_change(1)
+            factors['price_momentum_5d'] = data['lastprice'].pct_change(5)
+            factors['price_momentum_10d'] = data['lastprice'].pct_change(10)
+            
+            # 计算价格波动率
+            factors['price_volatility_5d'] = data['lastprice'].rolling(5).std()
+            factors['price_volatility_10d'] = data['lastprice'].rolling(10).std()
+            
+            # 计算价格区间
+            factors['price_range'] = (data['highprice'] - data['lowprice']) / data['openprice']
+            
+            self.logger.info(f"价格因子创建成功，形状: {factors.shape}")
+            return factors
+            
+        except Exception as e:
+            self.logger.error(f"创建价格因子时出错: {str(e)}")
+            raise
         
-        factors = pd.DataFrame(index=tick_data.index)
-        
-        # 收益率
-        factors['returns'] = tick_data['close'].pct_change()
-        
-        # 波动率
-        factors['volatility'] = tick_data['close'].rolling(20).std()
-        
-        # 动量
-        factors['momentum'] = tick_data['close'].pct_change(10)
-        
-        # 趋势强度
-        factors['trend_strength'] = (tick_data['close'] - tick_data['close'].rolling(20).mean()) / tick_data['close'].rolling(20).std()
-        
-        return factors
-    
-    @staticmethod
-    def create_volume_factors(market_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-        """创建成交量特征因子
+    def create_volume_factors(self, data: pd.DataFrame) -> pd.DataFrame:
+        """创建成交量因子
         
         Args:
-            market_data: 市场数据字典
+            data: 市场数据
             
         Returns:
-            成交量特征因子DataFrame
+            成交量因子DataFrame
         """
-        tick_data = market_data['tick']
-        daily_data = market_data['daily']
+        try:
+            self.logger.info("开始创建成交量因子")
+            
+            # 检查数据列
+            required_columns = ['volume', 'lastprice']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                self.logger.error(f"缺少必要的列: {missing_columns}")
+                self.logger.info(f"可用的列: {data.columns.tolist()}")
+                # 尝试使用替代列
+                data = data.copy()
+                if 'lastprice' not in data.columns and 'close' in data.columns:
+                    self.logger.info("使用'close'列替代'lastprice'列")
+                    data['lastprice'] = data['close']
+                
+                # 再次检查是否所有必要的列都存在
+                missing_columns = [col for col in required_columns if col not in data.columns]
+                if missing_columns:
+                    raise ValueError(f"缺少必要的列: {missing_columns}")
+            
+            factors = pd.DataFrame(index=data.index)
+            
+            # 计算成交量变化
+            factors['volume_change'] = data['volume'].pct_change()
+            
+            # 计算成交量移动平均
+            factors['volume_ma5'] = data['volume'].rolling(5).mean()
+            factors['volume_ma10'] = data['volume'].rolling(10).mean()
+            
+            # 计算成交量相对强度
+            factors['volume_relative_strength'] = data['volume'] / data['volume'].rolling(5).mean()
+            
+            # 计算成交额
+            factors['amount'] = data['volume'] * data['lastprice']
+            factors['amount_ma5'] = factors['amount'].rolling(5).mean()
+            
+            self.logger.info(f"成交量因子创建成功，形状: {factors.shape}")
+            return factors
+            
+        except Exception as e:
+            self.logger.error(f"创建成交量因子时出错: {str(e)}")
+            raise
         
-        factors = pd.DataFrame(index=tick_data.index)
-        
-        # 成交量变化
-        factors['volume_change'] = tick_data['volume'].pct_change()
-        
-        # 量价背离
-        factors['volume_price_divergence'] = tick_data['volume'].pct_change() - tick_data['close'].pct_change()
-        
-        # 资金流向
-        factors['money_flow'] = (tick_data['close'] - tick_data['open']) * tick_data['volume']
-        
-        # 成交量趋势
-        factors['volume_trend'] = tick_data['volume'].rolling(20).mean().pct_change()
-        
-        return factors
-    
-    @staticmethod
-    def create_market_microstructure_factors(market_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def create_market_microstructure_factors(self, data: pd.DataFrame) -> pd.DataFrame:
         """创建市场微观结构因子
         
         Args:
-            market_data: 市场数据字典
+            data: 市场数据
             
         Returns:
             市场微观结构因子DataFrame
         """
-        tick_data = market_data['tick']
+        try:
+            self.logger.info("开始创建市场微观结构因子")
+            
+            # 检查数据列
+            required_columns = ['lastprice', 'volume']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                self.logger.error(f"缺少必要的列: {missing_columns}")
+                self.logger.info(f"可用的列: {data.columns.tolist()}")
+                # 尝试使用替代列
+                data = data.copy()
+                if 'lastprice' not in data.columns and 'close' in data.columns:
+                    self.logger.info("使用'close'列替代'lastprice'列")
+                    data['lastprice'] = data['close']
+                
+                # 再次检查是否所有必要的列都存在
+                missing_columns = [col for col in required_columns if col not in data.columns]
+                if missing_columns:
+                    raise ValueError(f"缺少必要的列: {missing_columns}")
+            
+            factors = pd.DataFrame(index=data.index)
+            
+            # 计算价格波动率
+            factors['price_volatility'] = data['lastprice'].rolling(5).std()
+            
+            # 计算成交量波动率
+            factors['volume_volatility'] = data['volume'].rolling(5).std()
+            
+            # 计算价格-成交量相关性
+            price_change = data['lastprice'].pct_change()
+            volume_change = data['volume'].pct_change()
+            factors['price_volume_correlation'] = price_change.rolling(5).corr(volume_change)
+            
+            # 计算价格自相关性
+            factors['price_autocorrelation'] = data['lastprice'].rolling(5).apply(
+                lambda x: x.autocorr() if len(x) > 1 else 0
+            )
+            
+            self.logger.info(f"市场微观结构因子创建成功，形状: {factors.shape}")
+            return factors
+            
+        except Exception as e:
+            self.logger.error(f"创建市场微观结构因子时出错: {str(e)}")
+            raise
         
-        factors = pd.DataFrame(index=tick_data.index)
-        
-        # 买卖盘口压力
-        if 'bid_volume' in tick_data.columns and 'ask_volume' in tick_data.columns:
-            factors['order_book_pressure'] = (tick_data['bid_volume'] - tick_data['ask_volume']) / (tick_data['bid_volume'] + tick_data['ask_volume'])
-        
-        # 价格冲击
-        factors['price_impact'] = tick_data['close'].pct_change() / tick_data['volume']
-        
-        # 交易活跃度
-        factors['trading_activity'] = tick_data['volume'] / tick_data['volume'].rolling(20).mean()
-        
-        return factors
-    
-    @staticmethod
-    def create_combined_factors(market_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def create_combined_factors(self, data: pd.DataFrame) -> pd.DataFrame:
         """创建组合因子
         
         Args:
-            market_data: 市场数据字典
+            data: 市场数据
             
         Returns:
             组合因子DataFrame
         """
-        tick_data = market_data['tick']
-        daily_data = market_data['daily']
-        
-        factors = pd.DataFrame(index=tick_data.index)
-        
-        # 量价趋势一致性
-        price_trend = tick_data['close'].rolling(20).mean().pct_change()
-        volume_trend = tick_data['volume'].rolling(20).mean().pct_change()
-        factors['price_volume_trend_alignment'] = price_trend * volume_trend
-        
-        # 多周期动量
-        short_momentum = tick_data['close'].pct_change(5)
-        long_momentum = tick_data['close'].pct_change(20)
-        factors['momentum_contrast'] = short_momentum - long_momentum
-        
-        # 波动率调整后的收益率
-        returns = tick_data['close'].pct_change()
-        volatility = tick_data['close'].rolling(20).std()
-        factors['volatility_adjusted_returns'] = returns / volatility
-        
-        return factors 
+        try:
+            self.logger.info("开始创建组合因子")
+            
+            # 检查数据列
+            required_columns = ['lastprice', 'volume']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                self.logger.error(f"缺少必要的列: {missing_columns}")
+                self.logger.info(f"可用的列: {data.columns.tolist()}")
+                # 尝试使用替代列
+                data = data.copy()
+                if 'lastprice' not in data.columns and 'close' in data.columns:
+                    self.logger.info("使用'close'列替代'lastprice'列")
+                    data['lastprice'] = data['close']
+                
+                # 再次检查是否所有必要的列都存在
+                missing_columns = [col for col in required_columns if col not in data.columns]
+                if missing_columns:
+                    raise ValueError(f"缺少必要的列: {missing_columns}")
+            
+            factors = pd.DataFrame(index=data.index)
+            
+            # 计算价格动量与成交量的组合因子
+            price_momentum = data['lastprice'].pct_change(5)
+            volume_momentum = data['volume'].pct_change(5)
+            factors['price_volume_momentum'] = price_momentum * volume_momentum
+            
+            # 计算价格波动率与成交量的组合因子
+            price_volatility = data['lastprice'].rolling(5).std()
+            volume_volatility = data['volume'].rolling(5).std()
+            factors['price_volume_volatility'] = price_volatility * volume_volatility
+            
+            # 计算价格趋势与成交量的组合因子
+            price_trend = data['lastprice'].rolling(5).mean().pct_change()
+            volume_trend = data['volume'].rolling(5).mean().pct_change()
+            factors['price_volume_trend'] = price_trend * volume_trend
+            
+            self.logger.info(f"组合因子创建成功，形状: {factors.shape}")
+            return factors
+            
+        except Exception as e:
+            self.logger.error(f"创建组合因子时出错: {str(e)}")
+            raise 

@@ -4,6 +4,8 @@ import os
 from datetime import datetime, timedelta
 from core.data_feed import DataFeed
 from xtquant import xtdata
+from core.data_feed import validate_market_data
+import logging
 
 class QMTDataFeed(DataFeed):
     """QMT数据源实现"""
@@ -15,6 +17,31 @@ class QMTDataFeed(DataFeed):
         """
         self.avg_turnover_days = avg_turnover_days
         self._xtdata = xtdata  # 使用组合方式存储xtdata实例
+        self._check_connection()
+        self.logger = logging.getLogger(__name__)
+
+    def _check_connection(self):
+        """检查QMT连接状态，如果无法连接则提示用户"""
+        try:
+            # 尝试获取一个简单的数据来测试连接
+            test_stock = '600519.SH'
+            self._xtdata.get_instrument_detail(test_stock)
+            logging.info("成功连接到QMT服务")
+        except Exception as e:
+            logging.error(f"无法连接QMT服务: {str(e)}")
+            print("\n" + "="*50)
+            print("请确保QMT-投研版或QMT-极简版已开启")
+            print("打开QMT后，请按回车键继续...")
+            print("="*50 + "\n")
+            input()
+            logging.info("用户确认已打开QMT，继续执行...")
+            # 再次尝试连接
+            try:
+                self._xtdata.get_instrument_detail(test_stock)
+                logging.info("成功连接到QMT服务")
+            except Exception as e:
+                logging.error(f"仍然无法连接QMT服务: {str(e)}")
+                raise Exception("无法连接到QMT服务，请确保QMT已正确安装并运行")
 
     def __getattr__(self, name):
         """
@@ -240,48 +267,69 @@ class QMTDataFeed(DataFeed):
             logging.error(f"获取板块 {sector} 的股票列表失败: {str(e)}")
             return []
 
-    def get_market_data(self, stock_list, start_date, end_date, period='tick', fields=None):
+    @validate_market_data
+    def get_market_data(self, stock_list, start_date, end_date, period='tick', field_list=[]):
         """
         获取市场数据
-        :param stock_list: 股票代码列表
-        :param start_date: 开始日期
-        :param end_date: 结束日期
-        :param period: 周期
-        :param fields: 字段列表
-        :return: dict, key为股票代码,value为DataFrame
+        
+        Args:
+            stock_list: 股票代码列表
+            start_date: 开始日期，格式为YYYYMMDD
+            end_date: 结束日期，格式为YYYYMMDD
+            period: 数据周期，默认为tick
+            field_list: 字段列表，默认为None
+            
+        Returns:
+            dict: 股票代码为key，DataFrame为value的字典
+            
+        Raises:
+            ValueError: 当获取的市场数据为空时抛出
         """
-        try:
-            if fields is None:
-                fields = ['lastPrice', 'volume', 'amount']
-            return self._xtdata.get_market_data_ex(
-                stock_list=stock_list,
-                start_time=start_date,
-                end_time=end_date,
-                period=period,
-                field_list=fields
-            )
-        except Exception as e:
-            logging.error(f"获取市场数据失败: {str(e)}")
-            return {}
+  
+        self.logger.info(f"获取市场数据: 股票列表={stock_list}, 开始日期={start_date}, 结束日期={end_date}, 周期={period}, 字段={field_list}")
+        
+        result = {}
+        
+        for stock_code in stock_list:
+            try:
+                data = self._xtdata.get_market_data_ex(
+                    stock_list=[stock_code],
+                    start_time=start_date,
+                    end_time=end_date,
+                    period=period,
+                    field_list=field_list
+                )
+                
+                if stock_code not in data or data[stock_code] is None or data[stock_code].empty:
+                    self.logger.warning(f"股票 {stock_code} 的数据为空")
+                    continue
+                    
+                result[stock_code] = data[stock_code]
+                self.logger.info(f"成功获取股票 {stock_code} 的数据，形状: {data[stock_code].shape}")
+                    
+            except Exception as e:
+                self.logger.error(f"获取股票 {stock_code} 的{period}数据失败: {str(e)}")
+                
+        if not result:
+            raise ValueError("市场数据为空")
+            
+        return result
 
-    def download_data(self, sector_name='沪深A股', period='1d', 
+    def download_data(self, stock_list, period='1d', 
                             start_time=(datetime.now() - timedelta(days=365)).strftime('%Y%m%d'), end_time=datetime.now().strftime('%Y%m%d')):
         """
         下载历史数据
-        :param sector_name: 板块名称
+        :param stock_list: 股票代码列表
         :param period: 数据周期，如'1d'或'tick'
         :param start_time: 开始时间，默认为一年前
         :param end_time: 结束时间，默认为当前时间
         """
         try:
-                
             # 如果不是tick数据，不需要指定时间范围
             start_time, end_time = ('', '') if period != 'tick' else (start_time, end_time)
             
-            # 获取股票列表
-            stock_list = self.get_sector_stocks(sector_name)
             if not stock_list:
-                logging.error(f"获取板块 {sector_name} 的股票列表失败")
+                logging.error("股票列表为空")
                 return
             
             logging.info(f'共需下载{len(stock_list)}支股票数据')

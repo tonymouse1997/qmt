@@ -4,7 +4,6 @@ import os
 from datetime import datetime, timedelta
 from core.data_feed import DataFeed
 from xtquant import xtdata
-from core.data_feed import validate_market_data
 import logging
 
 class QMTDataFeed(DataFeed):
@@ -267,7 +266,6 @@ class QMTDataFeed(DataFeed):
             logging.error(f"获取板块 {sector} 的股票列表失败: {str(e)}")
             return []
 
-    @validate_market_data
     def get_market_data(self, stock_list, start_date, end_date, period='tick', field_list=[]):
         """
         获取市场数据

@@ -253,7 +253,7 @@ def main():
     pipeline = MultiFactorPipeline(data_feed=data_feed)
     
     # 下载历史数据（仅下载几只测试用的股票）
-    test_stocks = ['600519.SH', '000858.SZ', '601318.SH']  # 茅台、五粮液、中国平安
+    test_stocks = ['600519.SH']  # 茅台、五粮液、中国平安
     data_feed.download_data(
         stock_list=test_stocks,  # 使用测试股票列表
         period='tick',

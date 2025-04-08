@@ -62,6 +62,15 @@ class MultiFactorPipeline:
             if not isinstance(symbols, str):
                 raise ValueError("股票代码必须是字符串类型")
             
+            # 定义需要的字段
+            required_fields = [
+                'lastprice',  # 最新价格
+                'openprice',  # 开盘价
+                'highprice',  # 最高价
+                'lowprice',   # 最低价
+                'volume'      # 成交量
+            ]
+            
             # 1. 获取训练数据
             print("\n" + "="*50)
             print("阶段1: 获取训练数据")
@@ -69,7 +78,8 @@ class MultiFactorPipeline:
             processed_data = self.data_processor.prepare_data(
                 stock_list=[symbols],
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
+                field=required_fields
             )
             
             # 2. 构建因子

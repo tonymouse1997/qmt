@@ -28,8 +28,10 @@ class DataProcessor:
         self.logger.info(f"准备数据: 股票列表={stock_list}, 开始日期={start_date}, 结束日期={end_date}, 周期={period}, 字段={field}")
                 
         self.market_data = self.data_feed.get_market_data(stock_list, start_date, end_date, period, field)
-
-    
+        
+        # 处理数据，确保索引是datetime类型
+        processed_data = self.process_data()
+        return processed_data
 
     def process_data(self):
         """

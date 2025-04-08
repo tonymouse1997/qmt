@@ -62,6 +62,15 @@ class MultiFactorPipeline:
             if not isinstance(symbols, str):
                 raise ValueError("股票代码必须是字符串类型")
             
+            # 定义需要的字段
+            required_fields = [
+                'lastprice',  # 最新价格
+                'openprice',  # 开盘价
+                'highprice',  # 最高价
+                'lowprice',   # 最低价
+                'volume'      # 成交量
+            ]
+            
             # 1. 获取训练数据
             print("\n" + "="*50)
             print("阶段1: 获取训练数据")
@@ -69,7 +78,8 @@ class MultiFactorPipeline:
             processed_data = self.data_processor.prepare_data(
                 stock_list=[symbols],
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
+                field=required_fields
             )
             
             # 2. 构建因子
@@ -253,7 +263,7 @@ def main():
     pipeline = MultiFactorPipeline(data_feed=data_feed)
     
     # 下载历史数据（仅下载几只测试用的股票）
-    test_stocks = ['600519.SH', '000858.SZ', '601318.SH']  # 茅台、五粮液、中国平安
+    test_stocks = ['600519.SH']  # 茅台、五粮液、中国平安
     data_feed.download_data(
         stock_list=test_stocks,  # 使用测试股票列表
         period='tick',

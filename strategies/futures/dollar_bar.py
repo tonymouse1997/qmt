@@ -140,16 +140,16 @@ def main():
     # 获取市场数据
     market_data = qmt_feed.get_market_data(
         stock_list=[symbol],
-        start_date='20250301',
-        end_date='20250301',
+        start_date='20250401',
+        end_date='20250401',
         period='tick',
         field_list=['open', 'high', 'low', 'close', 'volume']
     )
-    
+    print(market_data[symbol])
     # 将数据转换为backtrader数据格式
     data = bt.feeds.PandasData(
         dataname=market_data[symbol],
-        datetime=None,  # 使用索引作为日期
+        datetime=None,  # 直接使用索引
         open='open',
         high='high',
         low='low',

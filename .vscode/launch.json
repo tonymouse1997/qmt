@@ -1,0 +1,12 @@
+{
+    "configurations": [
+    {
+  "name": "Python: Debug Module",
+  "type": "debugpy",
+  "request": "launch",
+  "module": "strategies.futures.dollar_bar",  // 替换为你的模块名（无需.py后缀）
+  "console": "integratedTerminal",
+  "cwd": "${workspaceFolder}"     // 可选：设置工作目录
+}
+    ]
+}

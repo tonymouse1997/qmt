@@ -3,30 +3,30 @@ import pandas as pd
 from functools import wraps
 from typing import Dict, List, Any
 
-def validate_market_data(func):
-    """验证市场数据返回格式的装饰器"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
+# def validate_market_data(func):
+#     """验证市场数据返回格式的装饰器"""
+#     @wraps(func)
+#     def wrapper(*args, **kwargs):
+#         result = func(*args, **kwargs)
         
-        if not isinstance(result, dict):
-            raise TypeError(f"返回值必须是字典类型，但得到 {type(result)}")
+#         if not isinstance(result, dict):
+#             raise TypeError(f"返回值必须是字典类型，但得到 {type(result)}")
         
-        for key, value in result.items():
-            if not isinstance(key, str):
-                raise TypeError(f"字典的键必须是字符串类型，但得到 {type(key)}")
-            if not isinstance(value, pd.DataFrame):
-                raise TypeError(f"字典的值必须是DataFrame类型，但得到 {type(value)}")
-            if not isinstance(value.index, pd.DatetimeIndex):
-                raise TypeError(f"DataFrame的索引必须是datetime类型，但得到 {type(value.index)}")
+#         for key, value in result.items():
+#             if not isinstance(key, str):
+#                 raise TypeError(f"字典的键必须是字符串类型，但得到 {type(key)}")
+#             if not isinstance(value, pd.DataFrame):
+#                 raise TypeError(f"字典的值必须是DataFrame类型，但得到 {type(value)}")
+#             if not isinstance(value.index, pd.DatetimeIndex):
+#                 raise TypeError(f"DataFrame的索引必须是datetime类型，但得到 {type(value.index)}")
         
-        return result
-    return wrapper
+#         return result
+#     return wrapper
 
 class DataFeed(ABC):
     """数据源抽象基类"""
     @abstractmethod
-    @validate_market_data
+    # @validate_market_data
     def get_market_data(self, stock_list: List[str], start_date: str, end_date: str, 
                        period: str = 'tick', field: List[str] = None) -> Dict[str, Any]:
         """获取市场数据

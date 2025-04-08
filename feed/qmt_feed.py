@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta
 from core.data_feed import DataFeed
 from xtquant import xtdata
-from core.data_feed import validate_market_data
+# from core.data_feed import validate_market_data
 import logging
 
 class QMTDataFeed(DataFeed):
@@ -267,7 +267,7 @@ class QMTDataFeed(DataFeed):
             logging.error(f"获取板块 {sector} 的股票列表失败: {str(e)}")
             return []
 
-    @validate_market_data
+    # @validate_market_data
     def get_market_data(self, stock_list, start_date, end_date, period='tick', field_list=[]):
         """
         获取市场数据
@@ -283,7 +283,7 @@ class QMTDataFeed(DataFeed):
             dict: 股票代码为key，DataFrame为value的字典
             
         Raises:
-            ValueError: 当获取的市场数据为空时抛出
+            ValueError: 当获取的市场数据为空且用户选择不下载数据时抛出
         """
   
         self.logger.info(f"获取市场数据: 股票列表={stock_list}, 开始日期={start_date}, 结束日期={end_date}, 周期={period}, 字段={field_list}")
@@ -304,14 +304,39 @@ class QMTDataFeed(DataFeed):
                     self.logger.warning(f"股票 {stock_code} 的数据为空")
                     continue
                     
-                result[stock_code] = data[stock_code]
-                self.logger.info(f"成功获取股票 {stock_code} 的数据，形状: {data[stock_code].shape}")
+                # 转换时间戳为datetime
+                df = data[stock_code]
+                df.index = pd.to_datetime(df.index,format='%Y%m%d%H%M%S')
+                result[stock_code] = df
+                self.logger.info(f"成功获取股票 {stock_code} 的数据，形状: {df.shape}")
                     
             except Exception as e:
                 self.logger.error(f"获取股票 {stock_code} 的{period}数据失败: {str(e)}")
                 
         if not result:
-            raise ValueError("市场数据为空")
+            print("\n" + "="*50)
+            print("未获取到市场数据，是否下载数据？(y/n)")
+            print("="*50 + "\n")
+            user_input = input().strip().lower()
+            
+            if user_input in ['y', '']:
+                try:
+                    self.logger.info("开始下载数据...")
+                    # 调用下载数据的方法
+                    self.download_data(
+                        stock_list=stock_list,
+                        start_time=start_date,
+                        end_time=end_date,
+                        period=period
+                    )
+                    self.logger.info("数据下载完成，重新获取数据...")
+                    # 重新获取数据
+                    return self.get_market_data(stock_list, start_date, end_date, period, field_list)
+                except Exception as e:
+                    self.logger.error(f"下载数据失败: {str(e)}")
+                    raise ValueError("下载数据失败")
+            else:
+                raise ValueError("市场数据为空且用户选择不下载数据")
             
         return result
 

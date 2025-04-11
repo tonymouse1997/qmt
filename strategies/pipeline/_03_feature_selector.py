@@ -31,8 +31,8 @@ class FeatureSelector:
         """
         try:
             # 处理缺失值
-            X = X.fillna(method='ffill').fillna(method='bfill')
-            y = y.fillna(method='ffill').fillna(method='bfill')
+            X = X.fillna(method='ffill')
+            y = y.fillna(method='ffill')
             
             # 删除非数值列
             numeric_columns = X.select_dtypes(include=[np.number]).columns

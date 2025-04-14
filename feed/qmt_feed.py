@@ -350,7 +350,7 @@ class QMTDataFeed(DataFeed):
                         if not isinstance(df.index, pd.DatetimeIndex):
                             self.logger.info(f"转换股票 {stock_code} 的时间索引...")
                             # 将索引转换为datetime格式，然后格式化为年月日时分秒
-                            df.index = pd.to_datetime(df.index).strftime('%Y-%m-%d %H:%M:%S')
+                            df.index = pd.to_datetime(df.index)
                         processed_data[stock_code] = df
                         self.logger.info(f"股票 {stock_code} 数据处理完成，数据量: {len(df)}")
                     except Exception as e:

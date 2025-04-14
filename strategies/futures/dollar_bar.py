@@ -283,7 +283,7 @@ def main():
     logger.info("转换数据为Backtrader格式...")
     original_bt_data = bt.feeds.PandasData(
         dataname=original_data,
-        datetime=None,
+        datetime=-1,
         open='open',
         high='high',
         low='low',
@@ -344,7 +344,7 @@ def main():
     plt.figure(figsize=(15, 10))
     
     plt.subplot(2, 1, 1)
-    plt.plot(original_data.index, original_data['lastPrice'], label='Original Data')
+    plt.plot(original_data.index.strftime('%Y-%m-%d %H:%M:%S'), original_data['lastPrice'], label='Original Data')
     plt.title('Original Timeframe')
     plt.legend()
     

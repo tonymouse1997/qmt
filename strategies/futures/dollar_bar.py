@@ -140,22 +140,27 @@ class DollarBarStrategy(bt.Strategy):
         """策略停止时的处理"""
         self.log('策略停止')
 
-def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000) -> pd.DataFrame:
+def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000, period: str = 'tick') -> pd.DataFrame:
     """将原始数据转换为dollar bar格式"""
     logger.info("="*50)
     logger.info("开始转换dollar bar")
     logger.info(f"输入数据大小: {len(df)} 行")
     logger.info(f"目标dollar value: {dollar_value}")
+    logger.info(f"数据频率: {period}")
     
     # 检查数据是否为空
     if df is None or df.empty:
         logger.error("输入数据为空")
         raise ValueError("输入数据为空")
+    
+    # 确定价格字段
+    price_field = 'lastPrice' if period == 'tick' else 'close'
+    logger.info(f"使用价格字段: {price_field}")
             
     # 处理NaN值
     logger.info("处理NaN值...")
     original_len = len(df)
-    df = df.dropna(subset=['lastPrice', 'volume'])
+    df = df.dropna(subset=[price_field, 'volume'])
     if len(df) < original_len:
         logger.warning(f"删除了 {original_len - len(df)} 行包含NaN的数据")
     if df.empty:
@@ -164,7 +169,7 @@ def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000) -> p
     
     # 计算每笔交易的金额
     logger.info("计算交易金额...")
-    df['dollar_volume'] = df['lastPrice'] * df['volume']
+    df['dollar_volume'] = df[price_field] * df['volume']
     df['cum_dollar_volume'] = df['dollar_volume'].cumsum()
     
     # 计算dollar bar的边界
@@ -204,10 +209,10 @@ def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000) -> p
             
             # 开始新的bar
             current_bar = {
-                'open': row['lastPrice'],
-                'high': row['lastPrice'],
-                'low': row['lastPrice'],
-                'lastPrice': row['lastPrice'],
+                'open': row[price_field],
+                'high': row[price_field],
+                'low': row[price_field],
+                price_field: row[price_field],
                 'volume': row['volume'],
                 'datetime': idx
             }
@@ -215,12 +220,12 @@ def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000) -> p
         else:
             # 更新当前bar
             if current_bar['open'] is None:
-                current_bar['open'] = row['lastPrice']
+                current_bar['open'] = row[price_field]
                 current_bar['datetime'] = idx
             
-            current_bar['high'] = max(current_bar['high'], row['lastPrice'])
-            current_bar['low'] = min(current_bar['low'], row['lastPrice'])
-            current_bar['lastPrice'] = row['lastPrice']
+            current_bar['high'] = max(current_bar['high'], row[price_field])
+            current_bar['low'] = min(current_bar['low'], row[price_field])
+            current_bar[price_field] = row[price_field]
             current_bar['volume'] += row['volume']
     
     # 添加最后一个bar
@@ -254,14 +259,18 @@ def main():
     symbol = '600519.SH'  # 示例使用贵州茅台
     logger.info(f"目标股票: {symbol}")
     
+    # 设置数据频率
+    period = '1m'  # 可以是'tick', '1m', '5m', '15m', '30m', '1d'等
+    logger.info(f"数据频率: {period}")
+    
     # 获取市场数据
     logger.info("获取市场数据...")
     market_data = qmt_feed.get_market_data(
         stock_list=[symbol],
         start_date='20250401',
         end_date='20250402',
-        period='tick',
-        field_list=['open', 'high', 'low', 'lastPrice', 'volume'],
+        period=period,
+        field_list=['open', 'high', 'low', 'lastPrice', 'close', 'volume'],
         auto_download=True
     )
     
@@ -277,17 +286,17 @@ def main():
     # 转换原始数据为dollar bar
     logger.info("转换数据为Dollar Bar格式...")
     original_data = market_data[symbol]
-    dollar_bar_data = convert_to_dollar_bars(original_data)
+    dollar_bar_data = convert_to_dollar_bars(original_data, period=period)
     
     # 将原始数据转换为backtrader数据格式
     logger.info("转换数据为Backtrader格式...")
     original_bt_data = bt.feeds.PandasData(
         dataname=original_data,
-        datetime=-1,
+        datetime=None,
         open='open',
         high='high',
         low='low',
-        close='lastPrice',
+        close='lastPrice' if period == 'tick' else 'close',
         volume='volume',
         openinterest=-1
     )
@@ -299,7 +308,7 @@ def main():
         open='open',
         high='high',
         low='low',
-        close='lastPrice',
+        close='lastPrice' if period == 'tick' else 'close',
         volume='volume',
         openinterest=-1
     )
@@ -339,28 +348,33 @@ def main():
     # 绘制结果
     logger.info("生成回测图表...")
     
+    # 创建图形和子图
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
+    # fig.autofmt_xdate()
+
+    # 第一个子图
+    ax1.plot(original_data.index.strftime('%Y-%m-%d %H:%M:%S'), original_data['lastPrice' if period == 'tick' else 'close'], label='Original')
+    ax1.set_xticks(range(0, data_rows := len(original_data), data_rows // 10))
+    # 旋转x轴标签
+    ax1.tick_params(axis='x', rotation=45)
+    ax1.set_title('Original Timeframe')
+    ax1.legend()
+
+    # 第二个子图
+    ax2.plot(dollar_bar_data.index, dollar_bar_data['lastPrice' if period == 'tick' else 'close'], label='Dollar Bar')
+    ax2.set_title('Dollar Bar Timeframe')
+    ax2.legend()
+
+    # 调整布局，确保旋转后的标签不会被截断
+    plt.tight_layout()
+
     # 保存对比图表
     logger.info("生成时间轴对比图表...")
-    plt.figure(figsize=(15, 10))
-    
-    plt.subplot(2, 1, 1)
-    plt.plot(original_data.index.strftime('%Y-%m-%d %H:%M:%S'), original_data['lastPrice'], label='Original Data')
-    plt.title('Original Timeframe')
-    plt.legend()
-    
-    plt.subplot(2, 1, 2)
-    plt.plot(dollar_bar_data.index, dollar_bar_data['lastPrice'], label='Dollar Bar')
-    plt.title('Dollar Bar Timeframe')
-    plt.legend()
-    
-    plt.tight_layout()
     plt.savefig('timeframe_comparison.png')
 
     cerebro.plot()
     plt.close()
 
-
-    
     logger.info("策略运行完成")
     logger.info("="*50)
 

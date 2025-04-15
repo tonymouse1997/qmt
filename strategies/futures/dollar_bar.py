@@ -8,6 +8,7 @@ from core.trade_interface import TradeInterface
 import matplotlib.pyplot as plt
 import logging
 import math
+import matplotlib.dates as mdates
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -156,6 +157,11 @@ def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000, peri
     # 确定价格字段
     price_field = 'lastPrice' if period == 'tick' else 'close'
     logger.info(f"使用价格字段: {price_field}")
+    
+    # 确保索引是日期时间格式
+    if not isinstance(df.index, pd.DatetimeIndex):
+        logger.info("转换输入数据索引为日期时间格式...")
+        df.index = pd.to_datetime(df.index)
             
     # 处理NaN值
     logger.info("处理NaN值...")
@@ -194,7 +200,7 @@ def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000, peri
         'open': None,
         'high': -np.inf,
         'low': np.inf,
-        'lastPrice': None,
+        price_field: None,
         'volume': 0,
         'datetime': None
     }
@@ -220,7 +226,7 @@ def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000, peri
         else:
             # 更新当前bar
             if current_bar['open'] is None:
-                current_bar['open'] = row[price_field]
+                current_bar['open'] = row['open']
                 current_bar['datetime'] = idx
             
             current_bar['high'] = max(current_bar['high'], row[price_field])
@@ -237,7 +243,10 @@ def convert_to_dollar_bars(df: pd.DataFrame, dollar_value: float = 1000000, peri
         logger.error("无法生成任何dollar bar")
         raise ValueError("无法生成任何dollar bar")
     
+    # 创建DataFrame并设置索引
     result_df = pd.DataFrame(dollar_bars)
+    result_df.set_index('datetime', inplace=True)
+    
     logger.info(f"成功生成 {len(result_df)} 个dollar bars")
     logger.info("="*50)
     return result_df
@@ -292,7 +301,7 @@ def main():
     logger.info("转换数据为Backtrader格式...")
     original_bt_data = bt.feeds.PandasData(
         dataname=original_data,
-        datetime=None,
+        datetime=None,  # 使用索引作为日期时间
         open='open',
         high='high',
         low='low',
@@ -302,9 +311,14 @@ def main():
     )
     
     # 将dollar bar数据转换为backtrader数据格式
+    # 确保dollar bar数据的索引是日期时间格式
+    if not isinstance(dollar_bar_data.index, pd.DatetimeIndex):
+        logger.info("转换dollar bar数据索引为日期时间格式...")
+        dollar_bar_data.index = pd.to_datetime(dollar_bar_data.index)
+    
     dollar_bar_bt_data = bt.feeds.PandasData(
         dataname=dollar_bar_data,
-        datetime=-1,
+        datetime=None,  # 使用索引作为日期时间
         open='open',
         high='high',
         low='low',
@@ -316,7 +330,7 @@ def main():
     # 添加数据到cerebro
     logger.info("添加数据到Backtrader...")
     cerebro.adddata(original_bt_data, name='original')
-    # cerebro.adddata(dollar_bar_bt_data, name='dollar_bar')
+    cerebro.adddata(dollar_bar_bt_data, name='dollar_bar')
     
     # 设置初始资金
     initial_cash = 1000000.0
@@ -348,33 +362,18 @@ def main():
     # 绘制结果
     logger.info("生成回测图表...")
     
-    # 创建图形和子图
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
-    # fig.autofmt_xdate()
-
-    # 第一个子图
-    ax1.plot(original_data.index.strftime('%Y-%m-%d %H:%M:%S'), original_data['lastPrice' if period == 'tick' else 'close'], label='Original')
-    ax1.set_xticks(range(0, data_rows := len(original_data), data_rows // 10))
-    # 旋转x轴标签
-    ax1.tick_params(axis='x', rotation=45)
-    ax1.set_title('Original Timeframe')
-    ax1.legend()
-
-    # 第二个子图
-    ax2.plot(dollar_bar_data.index, dollar_bar_data['lastPrice' if period == 'tick' else 'close'], label='Dollar Bar')
-    ax2.set_title('Dollar Bar Timeframe')
-    ax2.legend()
-
-    # 调整布局，确保旋转后的标签不会被截断
-    plt.tight_layout()
-
-    # 保存对比图表
-    logger.info("生成时间轴对比图表...")
-    plt.savefig('timeframe_comparison.png')
-
-    cerebro.plot()
-    plt.close()
-
+    # 使用Backtrader的内置绘图功能
+    # 设置绘图参数，确保时间轴对齐
+    cerebro.plot(style='candle', 
+                barup='red', bardown='green', 
+                volup='red', voldown='green', 
+                grid=True, volume=True,
+                width=16, height=9,  # 设置图表大小
+                dpi=100,  # 设置分辨率
+                numfigs=1,
+                plotmode=1,  # 使用滑动条模式
+                plotdist=2)  # 增加K线间距，使图表更稀疏
+    
     logger.info("策略运行完成")
     logger.info("="*50)
 

@@ -280,91 +280,88 @@ class QMTDataFeed(DataFeed):
         self.logger.info(f"自动下载: {auto_download}")
         
         try:
-            # 首先尝试获取数据
-            self.logger.info("正在从QMT获取数据...")
-            data = self._xtdata.get_market_data_ex(
-                stock_list=stock_list,
-                start_time=start_date,
-                end_time=end_date,
-                period=period,
-                field_list=field_list
-            )
-            self.logger.info("数据获取完成")
+            # 将字符串日期转换为datetime对象进行比较
+            start_dt = pd.to_datetime(start_date).date()
+            end_dt = pd.to_datetime(end_date).date()
             
-            # 检查数据获取结果
-            if not data:
-                self.logger.error("获取数据失败，返回空字典")
-                return {}
-            
-            self.logger.info(f"获取到 {len(data)} 只股票的数据")
+            # 最多尝试两次获取数据
+            max_retries = 2
+            for retry_count in range(max_retries):
+                # 1. 尝试获取数据
+                self.logger.info(f"正在从QMT获取数据 (尝试 {retry_count + 1}/{max_retries})...")
+                data = self._xtdata.get_market_data_ex(
+                    stock_list=stock_list,
+                    start_time=start_date,
+                    end_time=end_date,
+                    period=period,
+                    field_list=field_list
+                )
+                self.logger.info("数据获取完成")
                 
-            # 检查是否有空数据，如果有且auto_download为True，则尝试下载
-            if auto_download:
-                self.logger.info("开始检查数据完整性...")
-                for stock_code in stock_list:
-                    self.logger.info(f"检查股票 {stock_code} 的数据...")
-                    
-                    if stock_code not in data:
-                        self.logger.warning(f"股票 {stock_code} 不在返回数据中")
+                # 检查数据获取结果
+                if not data:
+                    self.logger.error("获取数据失败，返回空字典")
+                    if retry_count < max_retries - 1 and auto_download:
+                        self.logger.info("尝试下载历史数据并重新获取...")
+                        self.download_data(stock_list, period, start_date, end_date)
                         continue
-                        
-                    if data[stock_code] is None:
-                        self.logger.warning(f"股票 {stock_code} 数据为None")
-                    elif data[stock_code].empty:
-                        self.logger.warning(f"股票 {stock_code} 数据为空DataFrame")
-                        
-                    if data[stock_code] is None or data[stock_code].empty:
-                        self.logger.info(f"尝试下载股票 {stock_code} 的历史数据...")
-                        try:
-                            # 下载数据
-                            download_result = self._xtdata.download_history_data(
-                                stock_code=stock_code,
-                                period=period,
-                                start_time=start_date,
-                                end_time=end_date
-                            )
-                            if download_result:
-                                self.logger.info(f"股票 {stock_code} 数据下载成功")
-                                self.logger.info("重新获取所有股票数据...")
-                                # 重新获取数据
-                                data = self._xtdata.get_market_data_ex(
-                                    stock_list=stock_list,
-                                    start_time=start_date,
-                                    end_time=end_date,
-                                    period=period,
-                                    field_list=field_list
-                                )
-                                self.logger.info("数据重新获取完成")
-                            else:
-                                self.logger.warning(f"股票 {stock_code} 数据下载失败")
-                        except Exception as e:
-                            self.logger.error(f"下载股票 {stock_code} 数据时发生错误: {str(e)}")
-            
-            # 确保返回的DataFrame索引是日期时间格式
-            self.logger.info("开始处理数据格式...")
-            processed_data = {}
-            for stock_code, df in data.items():
-                if df is not None and not df.empty:
-                    try:
-                        self.logger.info(f"处理股票 {stock_code} 的数据...")
-                        if not isinstance(df.index, pd.DatetimeIndex):
-                            self.logger.info(f"转换股票 {stock_code} 的时间索引...")
-                            # 将索引转换为datetime格式，然后格式化为年月日时分秒
-                            df.index = pd.to_datetime(df.index)
-                        processed_data[stock_code] = df
-                        self.logger.info(f"股票 {stock_code} 数据处理完成，数据量: {len(df)}")
-                    except Exception as e:
-                        self.logger.error(f"处理股票 {stock_code} 数据时发生错误: {str(e)}")
-                else:
-                    self.logger.warning(f"股票 {stock_code} 的数据为空或无效")
-                    
-            if not processed_data:
-                self.logger.error("没有成功处理任何股票的数据")
-            else:
-                self.logger.info(f"数据处理完成，共处理 {len(processed_data)} 只股票的数据")
+                    else:
+                        return {}
                 
+                # 2. 处理索引的日期格式
+                self.logger.info("开始处理数据格式...")
+                processed_data = {}
+                for stock_code, df in data.items():
+                    if df is not None and not df.empty:
+                        try:
+                            self.logger.info(f"处理股票 {stock_code} 的数据...")
+                            if not isinstance(df.index, pd.DatetimeIndex):
+                                self.logger.info(f"转换股票 {stock_code} 的时间索引...")
+                                # 将索引转换为datetime格式
+                                df.index = pd.to_datetime(df.index)
+                            processed_data[stock_code] = df
+                            self.logger.info(f"股票 {stock_code} 数据处理完成，数据量: {len(df)}")
+                        except Exception as e:
+                            self.logger.error(f"处理股票 {stock_code} 数据时发生错误: {str(e)}")
+                    else:
+                        self.logger.warning(f"股票 {stock_code} 的数据为空或无效")
+                
+                # 3. 判断开始时间和结束时间和参数相同
+                need_retry = False
+                for stock_code, df in processed_data.items():
+                    if df is not None and not df.empty:
+                        # 检查数据的时间范围
+                        min_date = df.index.min().date()
+                        max_date = df.index.max().date()
+                        
+                        # 检查数据范围是否满足要求
+                        if min_date > start_dt or max_date < end_dt:
+                            self.logger.warning(f"股票 {stock_code} 的数据范围不满足要求: {min_date} 到 {max_date}")
+                            need_retry = True
+                
+                # 如果数据范围满足要求，则返回处理后的数据
+                if not need_retry:
+                    if not processed_data:
+                        self.logger.error("没有成功处理任何股票的数据")
+                    else:
+                        self.logger.info(f"数据处理完成，共处理 {len(processed_data)} 只股票的数据")
+                    
+                    self.logger.info("="*50)
+                    return processed_data
+                
+                # 如果需要重试且还有重试机会，则下载历史数据并重新获取
+                if retry_count < max_retries - 1 and auto_download:
+                    self.logger.info("数据范围不满足要求，尝试下载历史数据并重新获取...")
+                    self.download_data(stock_list=stock_list, period=period, start_time=start_date, end_time=end_date)
+                    continue
+                else:
+                    self.logger.warning(f"重新获取数据后，数据范围仍然不满足要求 (实际数据范围: {min_date} 到 {max_date})")
+                    return processed_data
+            
+            # 如果所有重试都失败，则返回空字典
+            self.logger.error("所有重试都失败")
             self.logger.info("="*50)
-            return processed_data
+            return {}
             
         except Exception as e:
             self.logger.error(f"获取市场数据失败: {str(e)}")
@@ -372,7 +369,7 @@ class QMTDataFeed(DataFeed):
             self.logger.error(f"详细错误信息:\n{traceback.format_exc()}")
             self.logger.info("="*50)
             return {}
-
+    
     def download_data(self, stock_list, period='1d', 
                             start_time=(datetime.now() - timedelta(days=365)).strftime('%Y%m%d'), end_time=datetime.now().strftime('%Y%m%d')):
         """
